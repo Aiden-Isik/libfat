@@ -31,6 +31,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <sys/param.h>
+#include <limits.h>
 
 #include "common.h"
 #include "partition.h"
@@ -64,8 +65,10 @@ static const devoptab_t dotab_fat = {
 	_FAT_ftruncate_r,
 	_FAT_fsync_r,
 	NULL,	/* Device data */
-	NULL,
-	NULL
+	NULL,	// chmod_r
+	NULL,	// fchmod_r
+	_FAT_rmdir_r,
+	_FAT_stat_r, // This is lstat, but we don't support symlinks
 };
 
 bool fatMount (const char* name, const DISC_INTERFACE* interface, sec_t startSector, uint32_t cacheSize, uint32_t SectorsPerPage) {
@@ -109,8 +112,6 @@ bool fatMount (const char* name, const DISC_INTERFACE* interface, sec_t startSec
 	devops->deviceData = partition;
 
 	AddDevice (devops);
-	
-	printf("fat Mount %s\r\n",devops->name);
 
 	return true;
 }
@@ -155,6 +156,9 @@ bool fatInit (uint32_t cacheSize, bool setAsDefaultDevice) {
 		i++)
 	{
 		disc = _FAT_disc_interfaces[i].getInterface();
+		if (!disc) {
+			continue;
+		}
 		if (fatMount (_FAT_disc_interfaces[i].name, disc, 0, cacheSize, DEFAULT_SECTORS_PAGE)) {
 			// The first device to successfully mount is set as the default
 			if (defaultDevice < 0) {
@@ -169,7 +173,7 @@ bool fatInit (uint32_t cacheSize, bool setAsDefaultDevice) {
 	}
 
 	if (setAsDefaultDevice) {
-		char filePath[MAXPATHLEN * 2];
+		char filePath[PATH_MAX];
 		strcpy (filePath, _FAT_disc_interfaces[defaultDevice].name);
 		strcat (filePath, ":/");
 #ifdef ARGV_MAGIC

@@ -86,7 +86,7 @@ int _FAT_link_r (struct _reent *r, const char *existing, const char *newLink) {
 	return -1;
 }
 
-int _FAT_unlink_r (struct _reent *r, const char *path) {
+static int _FAT_unlinkCommon (struct _reent *r, const char *path, bool isRmDir) {
 	PARTITION* partition = NULL;
 	DIR_ENTRY dirEntry;
 	DIR_ENTRY dirContents;
@@ -130,17 +130,27 @@ int _FAT_unlink_r (struct _reent *r, const char *path) {
 
 	// If this is a directory, make sure it is empty
 	if (_FAT_directory_isDirectory (&dirEntry)) {
+		if (!isRmDir) {
+			_FAT_unlock(&partition->lock);
+			r->_errno = EISDIR;
+			return -1;
+		}
+
 		nextEntry = _FAT_directory_getFirstEntry (partition, &dirContents, cluster);
 
 		while (nextEntry) {
 			if (!_FAT_directory_isDot (&dirContents)) {
 				// The directory had something in it that isn't a reference to itself or it's parent
 				_FAT_unlock(&partition->lock);
-				r->_errno = EPERM;
+				r->_errno = ENOTEMPTY;
 				return -1;
 			}
 			nextEntry = _FAT_directory_getNextEntry (partition, &dirContents);
 		}
+	} else if (isRmDir) {
+		_FAT_unlock(&partition->lock);
+		r->_errno = ENOTDIR;
+		return -1;
 	}
 
 	if (_FAT_fat_isValidCluster(partition, cluster)) {
@@ -169,6 +179,10 @@ int _FAT_unlink_r (struct _reent *r, const char *path) {
 	} else {
 		return 0;
 	}
+}
+
+int _FAT_unlink_r (struct _reent *r, const char *path) {
+	return _FAT_unlinkCommon (r, path, false);
 }
 
 int _FAT_chdir_r (struct _reent *r, const char *path) {
@@ -292,7 +306,7 @@ int _FAT_rename_r (struct _reent *r, const char *oldName, const char *newName) {
 	memcpy (&newDirEntry, &oldDirEntry, sizeof(DIR_ENTRY));
 
 	// Set the new name
-	strncpy (newDirEntry.filename, pathEnd, MAX_FILENAME_LENGTH - 1);
+	strncpy (newDirEntry.filename, pathEnd, NAME_MAX - 1);
 
 	// Write the new entry
 	if (!_FAT_directory_addEntry (partition, &newDirEntry, dirCluster)) {
@@ -381,7 +395,7 @@ int _FAT_mkdir_r (struct _reent *r, const char *path, int mode) {
 		pathEnd += 1;
 	}
 	// Create the entry data
-	strncpy (dirEntry.filename, pathEnd, MAX_FILENAME_LENGTH - 1);
+	strncpy (dirEntry.filename, pathEnd, NAME_MAX - 1);
 	memset (dirEntry.entryData, 0, DIR_ENTRY_DATA_SIZE);
 
 	// Set the creation time and date
@@ -451,6 +465,10 @@ int _FAT_mkdir_r (struct _reent *r, const char *path, int mode) {
 	return 0;
 }
 
+int _FAT_rmdir_r (struct _reent *r, const char *path) {
+	return _FAT_unlinkCommon (r, path, true);
+}
+
 int _FAT_statvfs_r (struct _reent *r, const char *path, struct statvfs *buf)
 {
 	PARTITION* partition = NULL;
@@ -465,16 +483,13 @@ int _FAT_statvfs_r (struct _reent *r, const char *path, struct statvfs *buf)
 
 	_FAT_lock(&partition->lock);
 
-	if(memcmp(&buf->f_flag, "SCAN", 4) == 0)
-	{
-		//Special command was given to sync the numberFreeCluster
-		_FAT_partition_createFSinfo(partition);
-	}
-
-	if(partition->filesysType == FS_FAT32)
+	if(partition->filesysType == FS_FAT32) {
+		// Sync FSinfo block
+		_FAT_partition_readFSinfo(partition);
 		freeClusterCount = partition->fat.numberFreeCluster;
-	else
+	} else {
 		freeClusterCount = _FAT_fat_freeClusterCount (partition);
+	}
 
 	// FAT clusters = POSIX blocks
 	buf->f_bsize = partition->bytesPerCluster;		// File system block size.
@@ -496,7 +511,7 @@ int _FAT_statvfs_r (struct _reent *r, const char *path, struct statvfs *buf)
 	buf->f_flag = ST_NOSUID /* No support for ST_ISUID and ST_ISGID file mode bits */
 		| (partition->readOnly ? ST_RDONLY /* Read only file system */ : 0 ) ;
 	// Maximum filename length.
-	buf->f_namemax = MAX_FILENAME_LENGTH;
+	buf->f_namemax = NAME_MAX;
 
 	_FAT_unlock(&partition->lock);
 	return 0;
@@ -588,12 +603,11 @@ int _FAT_dirnext_r (struct _reent *r, DIR_ITER *dirState, char *filename, struct
 	// Make sure there is another file to report on
 	if (! state->validEntry) {
 		_FAT_unlock(&state->partition->lock);
-		r->_errno = ENOENT;
 		return -1;
 	}
 
 	// Get the filename
-	strncpy (filename, state->currentEntry.filename, MAX_FILENAME_LENGTH);
+	strncpy (filename, state->currentEntry.filename, NAME_MAX);
 	// Get the stats, if requested
 	if (filestat != NULL) {
 		_FAT_directory_entryStat (state->partition, &(state->currentEntry), filestat);

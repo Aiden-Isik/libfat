@@ -24,7 +24,7 @@ LIBDIR		:=	../lib
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
-CFLAGS	= -g -Os -Wall $(MACHDEP) $(INCLUDE) -DLIBXENON
+CFLAGS	= -g -Os -Wall -fpermissive $(MACHDEP) $(INCLUDE) -DLIBXENON
 CXXFLAGS	=	$(CFLAGS)
 
 ASFLAGS	:=	-g

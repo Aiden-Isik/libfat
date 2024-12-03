@@ -70,7 +70,7 @@ const INTERFACE_ID _FAT_disc_interfaces[] = {
         {"udc", &get_io_usbstorage_2},
 	{"sda", &get_io_ata},
 	{NULL, NULL}
-};	
+};
 
 /* ====================== Wii ====================== */
 #elif   defined (__wii__)
@@ -81,16 +81,8 @@ const INTERFACE_ID _FAT_disc_interfaces[] = {
 static const DISC_INTERFACE* get_io_wiisd (void) {
 	return &__io_wiisd;
 }
-static const DISC_INTERFACE* get_io_usbstorage_0 (void) {
-	return &__io_usbstorage_0;
-}
-
-static const DISC_INTERFACE* get_io_usbstorage_1 (void) {
-        return &__io_usbstorage_1;
-}
-
-static const DISC_INTERFACE* get_io_usbstorage_2 (void) {
-        return &__io_usbstorage_2;
+static const DISC_INTERFACE* get_io_usbstorage (void) {
+	return &__io_usbstorage;
 }
 
 static const DISC_INTERFACE* get_io_gcsda (void) {
@@ -113,14 +105,20 @@ const INTERFACE_ID _FAT_disc_interfaces[] = {
 #elif defined (__gamecube__)
 #include <sdcard/gcsd.h>
 
-static const DISC_INTERFACE* get_io_gcsda (void) {
-	return &__io_gcsda;
+static const DISC_INTERFACE* get_io_gcsd2 (void) {
+	return &__io_gcsd2;
 }
+
 static const DISC_INTERFACE* get_io_gcsdb (void) {
 	return &__io_gcsdb;
 }
 
+static const DISC_INTERFACE* get_io_gcsda (void) {
+	return &__io_gcsda;
+}
+
 const INTERFACE_ID _FAT_disc_interfaces[] = {
+	{"sd", get_io_gcsd2},
 	{"carda", get_io_gcsda},
 	{"cardb", get_io_gcsdb},
 	{NULL, NULL}
@@ -128,11 +126,9 @@ const INTERFACE_ID _FAT_disc_interfaces[] = {
 
 /* ====================== NDS ====================== */
 #elif defined (NDS)
+#include <nds/system.h>
+#include <nds/memory.h>
 #include <nds/arm9/dldi.h>
-
-static const DISC_INTERFACE* get_io_dsisd (void) {
-	return &__io_dsisd;
-}
 
 const INTERFACE_ID _FAT_disc_interfaces[] = {
 	{"sd",  get_io_dsisd},
@@ -148,6 +144,16 @@ const INTERFACE_ID _FAT_disc_interfaces[] = {
 	{"fat", discGetInterface},
 	{NULL, NULL}
 };	
+
+/* ====================== GP2X ====================== */
+#elif defined (GP2X)
+#include <disc_io.h>
+
+const INTERFACE_ID _FAT_disc_interfaces[] = {
+	{"sd",  get_io_gp2xsd},
+	{NULL, NULL}
+				     
+};
 
 #endif
 
